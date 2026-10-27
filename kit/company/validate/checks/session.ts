@@ -28,6 +28,7 @@ export const SESSION_IDS = [
     "session.client-assertion-aud",
     "session.client-assertion-unknown-key",
     "session.assertion-unknown-key",
+    "session.assertion-without-delegation",
     "dpop.nonce",
     "dpop.token-replay",
     "dpop.token-htu",
@@ -259,7 +260,7 @@ export async function checkSessions(ctx: Context, r: Recorder): Promise<void> {
         const ex = (
             await tokenRequest(ctx, sessionParams(ctx), {
                 clientKey: rogue,
-                note: "with a client assertion signed by a key that isn't in jwks_uri",
+                note: "with a client assertion signed by a key other than the one its delegation names",
             })
         ).ex;
         expectRefusal(
@@ -268,7 +269,7 @@ export async function checkSessions(ctx: Context, r: Recorder): Promise<void> {
             ex,
             "invalid_client",
             401,
-            "The Company accepted a client assertion whose signature doesn't verify with the Personal Agent's published keys.",
+            "The Company accepted a client assertion whose signature doesn't verify with the delegated key its delegation names.",
         );
     }
 
@@ -278,7 +279,7 @@ export async function checkSessions(ctx: Context, r: Recorder): Promise<void> {
         const assertion = await sessionAssertion(ctx, { key: rogue });
         const ex = (
             await tokenRequest(ctx, sessionParams(ctx, {}, assertion), {
-                note: "with a Session assertion signed by a key that isn't in jwks_uri",
+                note: "with a Session assertion signed by a key other than the one its delegation names",
             })
         ).ex;
         expectRefusal(
@@ -287,7 +288,28 @@ export async function checkSessions(ctx: Context, r: Recorder): Promise<void> {
             ex,
             "invalid_grant",
             400,
-            "The Company accepted a Session assertion whose signature doesn't verify with the Personal Agent's published keys.",
+            "The Company accepted a Session assertion whose signature doesn't verify with the delegated key its delegation names.",
+            ["invalid_client"],
+        );
+    }
+
+    if (r.wants("session.assertion-without-delegation")) {
+        const assertion = await sessionAssertion(ctx, {
+            key: ctx.identity.rootKey,
+            delegation: null,
+        });
+        const ex = (
+            await tokenRequest(ctx, sessionParams(ctx, {}, assertion), {
+                note: "with a Session assertion signed directly with the key in jwks_uri, with no delegation",
+            })
+        ).ex;
+        expectRefusal(
+            r,
+            "session.assertion-without-delegation",
+            ex,
+            "invalid_grant",
+            400,
+            "The Company accepted a Session assertion without a delegation. Assertions must be signed with a delegated key and carry its delegation in pap_dlg.",
             ["invalid_client"],
         );
     }

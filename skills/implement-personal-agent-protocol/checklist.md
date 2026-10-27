@@ -37,6 +37,11 @@ are left out.
 
 - [ ] **MUST**: Companies MUST reject a client assertion with any other `aud`, compared character for character, including their token endpoint URL.
 
+### Specification: [Delegated keys](https://personalagentprotocol.org/docs/0.3/spec#delegated-keys)
+
+- [ ] **MUST**: The Company MUST reject an assertion without a delegation, including one signed directly with a key from `jwks_uri`, and an assertion whose delegation fails any of these checks, with `invalid_client` for a client assertion and `invalid_grant` for a Session assertion (4.2).
+- [ ] **MUST NOT**: So a Company MUST NOT expect a User's delegated key to stay the same between requests or Sessions, or treat a new one as a reason to reject a request.
+
 ### Specification: [4.2 Starting a Session](https://personalagentprotocol.org/docs/0.3/spec#starting-sessions)
 
 - [ ] **MUST**: As with the client assertion (4.1), the Company MUST reject any other `aud`, compared character for character. draft-ietf-oauth-rfc7523bis §4 also allows the token endpoint URL as an authorization grant's audience.
@@ -81,15 +86,16 @@ Assertions and DPoP proofs are JWTs. To sign and verify them consistently:
 
 - [ ] Personal agents: sign assertions and DPoP proofs with ES256. Every company accepts it in proofs (MUST, 3.2). Companies: accept ES256 and RS256 in assertions. Use RSA keys of at least 2048 bits.
 - [ ] Reject `alg: none` and symmetric algorithms such as HS256.
-- [ ] Verify assertions only with keys from the personal agent's verified `jwks_uri` (4.1). Ignore `jku`, `x5u`, and any key embedded in an assertion. DPoP proofs are the one exception: the public key in their `jwk` header is how they work (4.3).
+- [ ] Verify delegations only with keys from the personal agent's verified `jwks_uri`, and assertions only with the key their verified delegation names in `cnf.jwk` (4.1). Ignore `jku`, `x5u`, and any other key embedded in an assertion. DPoP proofs are the one other exception: the public key in their `jwk` header is how they work (4.3).
 - [ ] Check `aud`, `exp`, and `iat`. A client assertion or Session assertion has the company's `auth.issuer` as its `aud`, never an endpoint URL (4.1). Allow a small clock skew, such as 30 seconds, and reject assertions that claim a long lifetime.
 - [ ] Make each `jti` at least 128 random bits.
 
 ### Recommended: [Rotating keys](https://personalagentprotocol.org/docs/0.3/guides#both-key-rotation)
 
-- [ ] Give every key a `kid`.
-- [ ] Publish a new key in `jwks_uri` before signing with it, early enough for companies' caches to pick it up.
-- [ ] Keep an old public key published until everything signed with it has expired.
+- [ ] Give every key in `jwks_uri` a `kid`.
+- [ ] Publish a new key in `jwks_uri` before signing delegations with it, early enough for companies' caches to pick it up.
+- [ ] Keep an old public key published until every delegation signed with it has expired.
+- [ ] Personal agents: rotate delegated keys as often as you like. Each assertion carries its own delegation, so companies don't depend on a delegated key lasting (4.1).
 - [ ] Companies refetch `jwks_uri` when they see an unknown `kid`. The refetch happens before any signature is checked, so anyone can trigger it by naming a real personal agent and a made-up `kid`. Refetch each `jwks_uri` at most once per interval, such as 30 seconds, and count failed fetches too. Otherwise a stream of bad assertions can flood the personal agent's server.
 - [ ] Rotating signing keys doesn't affect account tokens. They are tied to the `client_id`, not a key (4.8).
 

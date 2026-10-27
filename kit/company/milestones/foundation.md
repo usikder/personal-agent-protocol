@@ -68,7 +68,10 @@ sign-in milestone.
 ([4.2](https://personalagentprotocol.org/docs/spec#starting-sessions)).
 
 - Accept the JWT bearer grant with a `private_key_jwt` client assertion and a DPoP Proof.
-- Verify both assertions against the Personal Agent's `jwks_uri`. Check the Session assertion's
+- Verify both assertions as [4.1](https://personalagentprotocol.org/docs/spec#delegated-keys)
+  describes: the delegation in `pap_dlg` with a key from the Personal Agent's `jwks_uri`, then the
+  assertion with the delegation's `cnf.jwk`. Reject an assertion without a delegation, and don't
+  expect a delegated key to stay the same. Check the Session assertion's
   `iss` is the authenticated `client_id`, `aud` is your `auth.issuer` as a single string (not the token endpoint URL), `iat`
   and `exp` are short-lived, and `jti` hasn't been seen.
 - Treat `sub` as the User ID: opaque, never shown, stored with the Session.
@@ -133,7 +136,11 @@ is remembered" in [4.4](https://personalagentprotocol.org/docs/spec#sign-in)). S
 - `protected_resources` is missing `https://{domain}` for a domain whose `poppy.json` names the
   issuer, or lists it with a path or trailing slash.
 - Following redirects when fetching the `client_id` URL, or trusting `jku`, `x5u`, or keys embedded
-  in an assertion ([guides](https://personalagentprotocol.org/docs/guides#both-signing)).
+  in an assertion other than the delegation's `cnf.jwk`
+  ([guides](https://personalagentprotocol.org/docs/guides#both-signing)).
+- Accepting an assertion signed directly with a key from `jwks_uri`, or keying rate limits or fraud
+  checks on the delegated key, which changes as often as the Personal Agent likes
+  ([4.1](https://personalagentprotocol.org/docs/spec#delegated-keys)).
 - A token endpoint replay cache per server or per process, so a proof accepted by one is accepted
   again by another ([guides](https://personalagentprotocol.org/docs/guides#company-dpop)).
 - `htu` compared with the internal URL behind a proxy, so every proof fails, or with the `Host`

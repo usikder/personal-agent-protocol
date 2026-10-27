@@ -33,6 +33,7 @@ The key words MUST, MUST NOT, SHOULD, SHOULD NOT, and MAY are used as described 
 | Session Token | The short-lived access token for a Session, used at the Company's APIs and conversations. It is signed out, or signed in with the account scopes the User granted, such as `orders:read` (4.2). |
 | Account Token | A long-lived credential from sign-in that lets the Personal Agent get signed-in Session Tokens later without asking the User again. It is used only at the Company's token endpoint (4.8). |
 | Session Key | The key pair a Personal Agent creates for one Session. Its Session Tokens are bound to it, and its thumbprint names the Session at the Company's token endpoint (4.3). |
+| Delegated key | A short-lived key a Personal Agent signs its assertions with. A delegation, signed by a key in the Personal Agent's `jwks_uri`, vouches for it (4.1). |
 | DPoP Proof | A signature the Personal Agent sends with each request to show it holds the key its Session Token is bound to (4.3). |
 | Direct Sign-In | The User signs in on the Company's own page in their browser and approves access (4.5). |
 | Device Sign-In | The User signs in on the Company's page on any device, using a link and code the Personal Agent shows them (4.6). |
@@ -270,16 +271,87 @@ A Personal Agent's `client_id` MUST be an HTTPS URL that returns its metadata do
 ```
 
 - `client_id` MUST equal the URL the document was fetched from.
-- `jwks_uri` MUST be an HTTPS URL on the same domain as `client_id`. The key set contains only public keys.
+- `jwks_uri` MUST be an HTTPS URL on the same domain as `client_id`. The key set contains only public keys. They sign delegations, not assertions (see Delegated keys, below).
 - `redirect_uris` lists where Direct Sign-In may send the User back to (4.5). Each entry MUST be an HTTPS URL on the same domain as `client_id`, or a loopback redirect URI for an app on the User's computer, as [RFC 8252](https://www.rfc-editor.org/rfc/rfc8252) §7.3 defines.
 - `extensions` lists the extensions the Personal Agent supports, keyed by name, each with its `version` (3.3). It is optional.
-- The Personal Agent authenticates at the token endpoint with a client assertion signed by a key from `jwks_uri` (`private_key_jwt`, [RFC 7523](https://www.rfc-editor.org/rfc/rfc7523)). The same keys sign its Session assertions (4.2). Its DPoP keys (4.3) are separate and aren't published.
+- The Personal Agent authenticates at the token endpoint with a client assertion (`private_key_jwt`, [RFC 7523](https://www.rfc-editor.org/rfc/rfc7523)) signed with a delegated key, which a key from `jwks_uri` vouches for (see Delegated keys, below). Delegated keys also sign its Session assertions (4.2). Its DPoP keys (4.3) are separate and aren't published.
 - The client assertion's `aud` MUST be the Company's `auth.issuer`, as a single string. Companies MUST reject a client assertion with any other `aud`, compared character for character, including their token endpoint URL. This follows [draft-ietf-oauth-rfc7523bis](https://datatracker.ietf.org/doc/draft-ietf-oauth-rfc7523bis/). The endpoints in a Company's metadata aren't checked (3.2), so an `aud` set to an endpoint could name another Company's endpoint, and that Company would accept the assertion.
 - The client assertion has `iat`, `exp`, and `jti` with the same rules as a Session assertion (4.2).
 
 Companies MAY require Personal Agents to register ahead of time. How registration works is outside this specification. A Company that requires registration rejects an unregistered Personal Agent with the OAuth `invalid_client` error (HTTP 401) when it starts a Session.
 
 Companies MAY keep allowlists or blocklists of Personal Agents by `client_id`, and MAY revoke a `client_id` that misuses the protocol. Companies MAY rate-limit Session creation by `client_id`. A Company that doesn't require registration MAY also limit how many new `client_id` values it accepts.
+
+#### Delegated keys
+
+A Personal Agent signs its client and Session assertions with delegated keys, not with the keys in its `jwks_uri`. A key in `jwks_uri` signs a delegation: a short-lived JWT that names a delegated key and vouches for it. The Personal Agent sends the delegation with each assertion it signs with that key.
+
+Delegated keys mean one leaked key doesn't expose every User, and the keys in `jwks_uri` reveal nothing about which Companies a User works with. Each User's assertions can be signed with keys of their own (9.7), and the keys in `jwks_uri` sign only those public keys, never a User ID or a Company.
+
+*Delegation header*
+
+```
+{ "alg": "ES256", "typ": "pap-delegation+jwt", "kid": "qijAJ9BUDC4h-e0ACwvoePoD599MZschC3kfU5kvQPE" }
+```
+
+*Delegation claims (JWT payload)*
+
+```
+{
+  "iss": "https://agent.example/agent.json",
+  "cnf": {
+    "jwk": {
+      "kty": "EC",
+      "crv": "P-256",
+      "x": "B484TQp7695xQfzTcW5Rf8HUNC3a-Bt9zYTlgxtJUeU",
+      "y": "5ji2Z0dKOVQLXZJ2yzHiryVoopigNfpEVr_D36MPgwM"
+    }
+  },
+  "iat": 1790900000,
+  "exp": 1790921600,
+  "jti": "Dl1x7yQbX1m3Jk0aT9cWvA"
+}
+```
+
+- `typ` MUST be `pap-delegation+jwt`, so a delegation can't be used as an assertion.
+- `kid` names the key in `jwks_uri` that signed the delegation.
+- `iss` is the Personal Agent's `client_id`.
+- `cnf.jwk` is the delegated public key, in the confirmation claim of [RFC 7800](https://www.rfc-editor.org/rfc/rfc7800). It MUST NOT contain private key members.
+- `iat` and `exp` are when the delegation was issued and when it expires. `exp` MUST be at most 24 hours after `iat`. The Personal Agent chooses the lifetime within that limit.
+- `jti` is a unique ID for the delegation, with at least 128 random bits.
+- The Personal Agent MUST NOT put a User ID, an Agent ID, a Company's issuer, or anything else about the User or the Companies they use in a delegation.
+
+How a Personal Agent issues delegations within its own systems is outside this specification.
+
+An assertion signed with a delegated key carries its delegation in its header. Its claims don't change:
+
+*Assertion header*
+
+```
+{
+  "alg": "ES256",
+  "typ": "JWT",
+  "kid": "9E421cSqd5UfAq5slDKYxXQd8Zmm8B3CIsT9cDxRHx8",
+  "pap_dlg": "eyJhbGciOiJFUzI1NiIsInR5cCI6InBhcC1kZWxlZ2F0aW9uK2p3dCIs…"
+}
+```
+
+- `pap_dlg` is the delegation, in compact form.
+- `kid` is the delegated key's JWK thumbprint ([RFC 7638](https://www.rfc-editor.org/rfc/rfc7638)).
+- The Personal Agent MUST NOT set an assertion's `exp` later than its delegation's `exp`.
+
+The Company verifies an assertion in this order:
+
+1. Find the key in the Personal Agent's `jwks_uri` named by the delegation's `kid`, and verify the delegation's signature with it.
+2. Check that the delegation's `typ` is `pap-delegation+jwt`, its `iss` is the authenticated `client_id`, it hasn't expired, and its `exp` is at most 24 hours after its `iat`.
+3. Verify the assertion's signature with the key in the delegation's `cnf.jwk`, and check that the assertion's `kid` is that key's thumbprint.
+4. Check the assertion's claims (above and 4.2), and that its `exp` is no later than the delegation's `exp`.
+
+The Company MUST reject an assertion without a delegation, including one signed directly with a key from `jwks_uri`, and an assertion whose delegation fails any of these checks, with `invalid_client` for a client assertion and `invalid_grant` for a Session assertion (4.2). It MAY cache a verified delegation by its `jti` until it expires, so it checks each delegation once. It MAY refuse delegations whose lifetime is longer than it accepts.
+
+The Personal Agent decides when to create a new delegated key and get a new delegation for it, as long as each assertion carries a delegation that is valid when the Company checks it. Nothing the Company stores depends on a delegated key: Sessions are named by their Session Keys (4.3), and Account Tokens are tied to the `client_id`, not a key (4.8). So a Company MUST NOT expect a User's delegated key to stay the same between requests or Sessions, or treat a new one as a reason to reject a request.
+
+A Personal Agent SHOULD use a different delegated key, and so a different delegation, for each Company. Otherwise Companies could match a User across Companies by the key's thumbprint or the delegation's `jti`. User IDs stay the same while delegated keys change (4.2).
 
 ### 4.2 Starting a Session
 
@@ -291,7 +363,7 @@ A Personal Agent that acts for a User through several agents, such as a travel a
 
 The Personal Agent holds the User IDs and Agent IDs of each of its Users at every Company, and MUST keep that mapping confidential: it MUST NOT publish it or share it with third parties, other than service providers that process it on the Personal Agent's behalf.
 
-To start a Session, the Personal Agent requests a Session Token from the Company's `token_endpoint` with the JWT bearer grant ([RFC 7523](https://www.rfc-editor.org/rfc/rfc7523) §2.1). The assertion is a short-lived JWT signed with a key from its `jwks_uri`, naming itself in `iss` and the User in `sub`. Unlike most uses of this grant, the client issues the assertion itself: the Personal Agent obtains its own authorization, as [draft-ietf-wimse-aims](https://datatracker.ietf.org/doc/draft-ietf-wimse-aims/) §10.4.2 describes, for one User the Company knows only by User ID. AIMS names the agent in `sub`. Poppy names it in `iss` and the User in `sub`, because the token is for that User. Like every token request, it also carries the Personal Agent's client assertion (4.1) and a DPoP Proof (4.3). The Personal Agent creates a new Session Key for the Session and signs the proof with it.
+To start a Session, the Personal Agent requests a Session Token from the Company's `token_endpoint` with the JWT bearer grant ([RFC 7523](https://www.rfc-editor.org/rfc/rfc7523) §2.1). The assertion is a short-lived JWT signed with a delegated key (4.1), naming itself in `iss` and the User in `sub`. Unlike most uses of this grant, the client issues the assertion itself: the Personal Agent obtains its own authorization, as [draft-ietf-wimse-aims](https://datatracker.ietf.org/doc/draft-ietf-wimse-aims/) §10.4.2 describes, for one User the Company knows only by User ID. AIMS names the agent in `sub`. Poppy names it in `iss` and the User in `sub`, because the token is for that User. Like every token request, it also carries the Personal Agent's client assertion (4.1) and a DPoP Proof (4.3). The Personal Agent creates a new Session Key for the Session and signs the proof with it.
 
 Off-the-shelf authorization servers generally don't accept this grant as it is. They accept a JWT bearer assertion only for a subject they already know, and the Company has usually never seen the User ID before. So a Company needs some custom work for this grant, such as an extension to its authorization server or a service in front of its token endpoint. The guides compare the options. The requests after it, for Direct and Device Sign-In, Account Tokens, and Token Exchange, are standard OAuth requests, though the Company's server still needs what 4.10 lists.
 
@@ -329,7 +401,7 @@ grant_type=urn%3Aietf%3Aparams%3Aoauth%3Agrant-type%3Ajwt-bearer
 - `iat` and `exp` are when the assertion was issued and when it expires, in seconds since 1970 (Unix time). `exp` MUST be at most five minutes after `iat`. The assertion is short-lived: one minute in this example.
 - `jti` is a unique ID for the assertion, with at least 128 random bits. The Company MUST reject a `jti` it has already seen from the same `client_id` until the assertion expires, so a copied assertion can't be used again.
 
-The Company verifies both assertions against the Personal Agent's `jwks_uri`, checks that the assertion's `iss` is the authenticated `client_id`, rejects a reused `jti`, and returns a new Session, named by the key in the proof:
+The Company verifies both assertions and their delegations as 4.1 describes, checks that the assertion's `iss` is the authenticated `client_id`, rejects a reused `jti`, and returns a new Session, named by the key in the proof:
 
 *Response: Company → Personal Agent*
 
@@ -787,7 +859,7 @@ grant_type=refresh_token
 
 The response has the same fields as in 4.4, without a new `refresh_token` unless the Company rotates it (below).
 
-- Companies MUST accept an Account Token only at their `token_endpoint` and `revocation_endpoint`, and only from the `client_id` it was issued to, authenticated by its client assertion. A copied Account Token is useless without the Personal Agent's private key.
+- Companies MUST accept an Account Token only at their `token_endpoint` and `revocation_endpoint`, and only from the `client_id` it was issued to, authenticated by its client assertion. A copied Account Token is useless without the Personal Agent's private keys.
 - The Session MUST belong to the same `client_id` and User ID as the Account Token, and MUST NOT have been signed in to a different account, even if it is now signed out (4.4). Otherwise the Company returns `invalid_grant` or `account_mismatch`.
 - `scope` MAY ask for fewer scopes than the Account Token has, for example read-only access for a task that only looks things up. It can't ask for more.
 - Using an Account Token doesn't extend its lifetime. A Company MAY return a new Account Token in `refresh_token`. The Personal Agent then MUST use the new one from then on.
@@ -833,6 +905,7 @@ The User can also disconnect the Personal Agent from the Company's account setti
 Every request in this section except Mediated Sign-In (4.7) is a standard OAuth request. What a Company's authorization server needs beyond the specifications listed at the start of this section:
 
 - **Sessions named by DPoP keys.** A proof from a new key starts a Session, and a proof from a known key renews it or signs it in (4.3). The Company keeps a record for each Session (4.4).
+- **Delegated keys.** Client and Session assertions are signed with short-lived keys that a key in the Personal Agent's `jwks_uri` vouches for in a delegation, carried in the assertion's `pap_dlg` header. The Company verifies the delegation, then the assertion (4.1).
 - **Assertions the Personal Agent issues.** The Personal Agent signs its own JWT bearer assertion, naming itself in `iss`, the User ID in `sub`, and optionally one of its agents in `agent_id` (4.2). Most authorization servers need custom work to accept it (4.2).
 - **One account per Session.** A Session that has been signed in to one account can't sign in to another. The token endpoint returns `account_mismatch` (4.4).
 - **Described scopes.** Each scope in `scopes_supported` has a description, in an OpenAPI description the Company lists or in `auth.scopes`, so the Personal Agent can choose the scopes a task needs (4.4).
@@ -1541,6 +1614,12 @@ Section 5 prevents it with two checks that only the right browser and the right 
 
 The opposite risk is a Personal Agent signing a proof over a code from someone else's browser, which would join that browser to the User's Session. This is the consent phishing that [RFC 10027](https://www.rfc-editor.org/rfc/rfc10027) describes for cross-device flows, and it's why the Personal Agent takes the code only from its own browser (section 5).
 
+### 9.7 Delegated keys
+
+A delegated key signs assertions for the Personal Agent (4.1). Whoever holds one can sign assertions for any User ID they know until the delegation expires, so a Personal Agent keeps delegations short and doesn't share delegated keys between Users. A User ID alone doesn't give access to an account: getting a signed-in Session Token still takes an Account Token (4.8), which the Personal Agent keeps as a secret.
+
+A delegation can't be withdrawn before it expires, so its lifetime limits what a stolen delegated key can do. Removing a key from `jwks_uri` revokes every delegation it signed, once Companies' caches of the key set expire. The guides describe rotating the keys in `jwks_uri` safely.
+
 ## 10. References
 
 This draft uses these standards and versions:
@@ -1549,7 +1628,7 @@ This draft uses these standards and versions:
 | --- | --- |
 | Requirement words | [RFC 2119](https://www.rfc-editor.org/rfc/rfc2119), [RFC 8174](https://www.rfc-editor.org/rfc/rfc8174) |
 | OAuth | [RFC 6749](https://www.rfc-editor.org/rfc/rfc6749), [RFC 6750](https://www.rfc-editor.org/rfc/rfc6750), [RFC 7009](https://www.rfc-editor.org/rfc/rfc7009), [RFC 8414](https://www.rfc-editor.org/rfc/rfc8414), [RFC 8693](https://www.rfc-editor.org/rfc/rfc8693), [RFC 9728](https://www.rfc-editor.org/rfc/rfc9728) |
-| Agent identity and assertions | [OAuth Client ID Metadata Document](https://datatracker.ietf.org/doc/draft-ietf-oauth-client-id-metadata-document/), [RFC 7519](https://www.rfc-editor.org/rfc/rfc7519), [RFC 7523](https://www.rfc-editor.org/rfc/rfc7523), [draft-ietf-oauth-rfc7523bis](https://datatracker.ietf.org/doc/draft-ietf-oauth-rfc7523bis/), [OpenID Connect Core 1.0](https://openid.net/specs/openid-connect-core-1_0.html), [draft-ietf-wimse-aims](https://datatracker.ietf.org/doc/draft-ietf-wimse-aims/) |
+| Agent identity and assertions | [OAuth Client ID Metadata Document](https://datatracker.ietf.org/doc/draft-ietf-oauth-client-id-metadata-document/), [RFC 7519](https://www.rfc-editor.org/rfc/rfc7519), [RFC 7523](https://www.rfc-editor.org/rfc/rfc7523), [RFC 7638](https://www.rfc-editor.org/rfc/rfc7638), [RFC 7800](https://www.rfc-editor.org/rfc/rfc7800), [draft-ietf-oauth-rfc7523bis](https://datatracker.ietf.org/doc/draft-ietf-oauth-rfc7523bis/), [OpenID Connect Core 1.0](https://openid.net/specs/openid-connect-core-1_0.html), [draft-ietf-wimse-aims](https://datatracker.ietf.org/doc/draft-ietf-wimse-aims/) |
 | Sign-in | [RFC 7636](https://www.rfc-editor.org/rfc/rfc7636), [RFC 8252](https://www.rfc-editor.org/rfc/rfc8252), [RFC 8628](https://www.rfc-editor.org/rfc/rfc8628), [RFC 9207](https://www.rfc-editor.org/rfc/rfc9207) |
 | Token binding and audience | [RFC 9449](https://www.rfc-editor.org/rfc/rfc9449), [RFC 8707](https://www.rfc-editor.org/rfc/rfc8707) |
 | Web browsing | [RFC 9111](https://www.rfc-editor.org/rfc/rfc9111), [RFC 6265bis](https://datatracker.ietf.org/doc/draft-ietf-httpbis-rfc6265bis/) |

@@ -317,15 +317,21 @@ export const CATALOG: CheckInfo[] = [
     ),
     foundation(
         "session.client-assertion-unknown-key",
-        "Token endpoint rejects a client assertion signed by a key not in jwks_uri",
-        "spec#starting-sessions",
-        "The Company verifies both assertions against the Personal Agent's jwks_uri",
+        "Token endpoint rejects a client assertion signed by a key its delegation doesn't name",
+        "spec#delegated-keys",
+        "Verify the assertion's signature with the key in the delegation's cnf.jwk",
     ),
     foundation(
         "session.assertion-unknown-key",
-        "Token endpoint rejects a Session assertion signed by a key not in jwks_uri",
-        "spec#starting-sessions",
-        "The Company verifies both assertions against the Personal Agent's jwks_uri",
+        "Token endpoint rejects a Session assertion signed by a key its delegation doesn't name",
+        "spec#delegated-keys",
+        "Verify the assertion's signature with the key in the delegation's cnf.jwk",
+    ),
+    foundation(
+        "session.assertion-without-delegation",
+        "Token endpoint rejects a Session assertion signed directly with a key from jwks_uri",
+        "spec#delegated-keys",
+        "The Company MUST reject an assertion without a delegation, including one signed directly with a key from jwks_uri",
     ),
 
     // Milestone 1: DPoP (4.3).

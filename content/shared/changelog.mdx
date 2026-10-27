@@ -144,6 +144,20 @@ SHOULD. The guides list authorization codes and PKCE code verifiers as secrets.
 
 </Change>
 
+<Change title="Assertions signed with delegated keys" breaking sections="2, 4.1, 4.2, 4.10, 9.7, 10, guides#both-signing, guides#both-key-rotation">
+
+The keys in a Personal Agent's `jwks_uri` no longer sign assertions. They sign delegations: short-lived
+JWTs, typed `pap-delegation+jwt`, that vouch for a delegated key in an RFC 7800 `cnf` claim and last
+at most 24 hours. The Personal Agent signs its client and Session assertions with the delegated key
+and carries the delegation in the assertion's `pap_dlg` header, and the Company verifies the
+delegation, then the assertion. A Personal Agent no longer shares one signing key across its Users,
+so one leaked key doesn't expose every User, and the keys in `jwks_uri` sign only public keys, revealing
+nothing about which Companies a User works with. A delegation carries nothing about the User or
+Companies, a Personal Agent should use a different delegated key at each Company, and Companies
+don't expect a delegated key to stay the same.
+
+</Change>
+
 ### Minor changes {#v0-3-minor}
 
 <Change title="OAuth terms for Poppy names" sections="2">

@@ -74,6 +74,12 @@ Breaking · [Spec 9.2](https://personalagentprotocol.org/docs/0.3/spec#secrets) 
 
 Personal Agents must keep Session Tokens, private keys, authorization codes, PKCE code verifiers, and device codes out of model context, as they already did Account Tokens. Before, these were a SHOULD. This follows the AI agent identity draft (draft-ietf-wimse-aims §8), which says the model must not have access to an agent's credentials. Other secrets, such as one-time codes, stay a SHOULD. The guides list authorization codes and PKCE code verifiers as secrets.
 
+#### Assertions signed with delegated keys
+
+Breaking · [Spec 2](https://personalagentprotocol.org/docs/0.3/spec#terms) · [Spec 4.1](https://personalagentprotocol.org/docs/0.3/spec#agent-identity) · [Spec 4.2](https://personalagentprotocol.org/docs/0.3/spec#starting-sessions) · [Spec 4.10](https://personalagentprotocol.org/docs/0.3/spec#oauth-additions) · [Spec 9.7](https://personalagentprotocol.org/docs/0.3/spec#delegated-key-security) · [Spec 10](https://personalagentprotocol.org/docs/0.3/spec#references) · [Guides: Signing and verifying JWTs](https://personalagentprotocol.org/docs/0.3/guides#both-signing) · [Guides: Rotating keys](https://personalagentprotocol.org/docs/0.3/guides#both-key-rotation)
+
+The keys in a Personal Agent's `jwks_uri` no longer sign assertions. They sign delegations: short-lived JWTs, typed `pap-delegation+jwt`, that vouch for a delegated key in an RFC 7800 `cnf` claim and last at most 24 hours. The Personal Agent signs its client and Session assertions with the delegated key and carries the delegation in the assertion's `pap_dlg` header, and the Company verifies the delegation, then the assertion. A Personal Agent no longer shares one signing key across its Users, so one leaked key doesn't expose every User, and the keys in `jwks_uri` sign only public keys, revealing nothing about which Companies a User works with. A delegation carries nothing about the User or Companies, a Personal Agent should use a different delegated key at each Company, and Companies don't expect a delegated key to stay the same.
+
 ### Minor changes
 
 #### OAuth terms for Poppy names

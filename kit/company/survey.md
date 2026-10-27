@@ -30,8 +30,8 @@ that should be one Company share one issuer
 
 - publishes OAuth Authorization Server Metadata (RFC 8414), and whether you can set
   `grant_types_supported`, `scopes_supported`, and `protected_resources` (RFC 9728) in it;
-- authenticates clients with `private_key_jwt` (RFC 7523), and can fetch client keys from a
-  `jwks_uri`;
+- authenticates clients with `private_key_jwt` (RFC 7523), can fetch client keys from a
+  `jwks_uri`, and has a hook to verify a delegated key (spec 4.1) before checking the assertion;
 - accepts clients it hasn't registered, identified by a URL (Client ID Metadata Documents), or has a
   hook to resolve them;
 - supports the JWT bearer grant with a `sub` it hasn't seen before, or custom grant types or token
@@ -99,7 +99,7 @@ MCP metadata exist, and anything notable such as redirects.>
 | Capability                                     | Supported? (yes / no / unknown) | Evidence (file, config, or "engineer said") |
 | ---------------------------------------------- | ------------------------------- | ------------------------------------------- |
 | RFC 8414 metadata, can add fields              |                                 |                                             |
-| `private_key_jwt` with keys from `jwks_uri`    |                                 |                                             |
+| `private_key_jwt` with delegated keys          |                                 |                                             |
 | Clients identified by URL, not registered      |                                 |                                             |
 | JWT bearer grant or custom grant types         |                                 |                                             |
 | Token hooks (add response fields, read params) |                                 |                                             |

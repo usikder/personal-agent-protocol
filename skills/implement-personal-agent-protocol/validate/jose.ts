@@ -175,6 +175,8 @@ export async function dpopProof(options: DpopOptions): Promise<string> {
 
 export type AssertionOptions = {
     key: SigningKey;
+    // The delegation that vouches for `key` (spec 4.1), sent in the pap_dlg header. Null sends none.
+    delegation?: string | null;
     iss: string;
     sub: string;
     aud: string;
@@ -190,6 +192,7 @@ export function signAssertion(options: AssertionOptions): Promise<string> {
     const iat = nowSeconds();
     const header: Record<string, unknown> = { alg: "ES256", typ: options.typ ?? "JWT" };
     if (options.key.publicJwk.kid) header.kid = options.key.publicJwk.kid;
+    if (options.delegation) header.pap_dlg = options.delegation;
     return signJwt(
         header,
         {
@@ -203,4 +206,69 @@ export function signAssertion(options: AssertionOptions): Promise<string> {
         },
         options.key.privateKey,
     );
+}
+
+// The longest lifetime a delegation may have (spec 4.1).
+export const MAX_DELEGATION_LIFETIME = 24 * 60 * 60;
+
+// A delegation (spec 4.1): `root`, a key in jwks_uri, vouches for `delegated` until it expires.
+export function signDelegation(options: {
+    root: SigningKey;
+    delegated: EcPublicJwk;
+    iss: string;
+    lifetime?: number;
+}): Promise<string> {
+    const iat = nowSeconds();
+    const { kty, crv, x, y } = options.delegated;
+    const header: Record<string, unknown> = { alg: "ES256", typ: "pap-delegation+jwt" };
+    if (options.root.publicJwk.kid) header.kid = options.root.publicJwk.kid;
+    return signJwt(
+        header,
+        {
+            iss: options.iss,
+            cnf: { jwk: { kty, crv, x, y } },
+            iat,
+            exp: iat + (options.lifetime ?? 60 * 60),
+            jti: randomId(16),
+        },
+        options.root.privateKey,
+    );
+}
+
+// Verifies an assertion signed with a delegated key, as a Company does (spec 4.1): the delegation in
+// pap_dlg with a root key, then the assertion with the delegation's cnf.jwk. Returns the decoded
+// assertion, or null.
+export async function verifyDelegated(
+    jwt: string,
+    roots: EcPublicJwk[],
+    clientId: string,
+): Promise<DecodedJwt | null> {
+    let header: Record<string, unknown>;
+    try {
+        header = decodeJwt(jwt).header;
+    } catch {
+        return null;
+    }
+    if (typeof header.pap_dlg !== "string") return null;
+    let dlgHeader: Record<string, unknown>;
+    try {
+        dlgHeader = decodeJwt(header.pap_dlg).header;
+    } catch {
+        return null;
+    }
+    const root =
+        roots.find((k) => k.kid === dlgHeader.kid) ?? (roots.length === 1 ? roots[0] : undefined);
+    if (!root) return null;
+    const delegation = await verifyJwt(header.pap_dlg, root);
+    if (!delegation || delegation.header.typ !== "pap-delegation+jwt") return null;
+    const d = delegation.payload;
+    const now = nowSeconds();
+    if (d.iss !== clientId || typeof d.exp !== "number" || typeof d.iat !== "number") return null;
+    if (d.exp <= now || d.exp - d.iat > MAX_DELEGATION_LIFETIME) return null;
+    const jwk = (d.cnf as { jwk?: EcPublicJwk } | undefined)?.jwk;
+    if (!jwk || jwk.kty !== "EC" || jwk.crv !== "P-256" || "d" in jwk) return null;
+    const assertion = await verifyJwt(jwt, jwk);
+    if (!assertion || assertion.header.kid !== (await thumbprint(jwk))) return null;
+    if (typeof assertion.payload.exp !== "number" || assertion.payload.exp > d.exp) return null;
+    return assertion;
 }

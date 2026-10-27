@@ -44,10 +44,11 @@ Assertions and DPoP proofs are JWTs. To sign and verify them consistently:
   (MUST, [3.2](/docs/spec#oauth-server)). Companies: accept ES256 and RS256 in assertions. Use RSA
   keys of at least 2048 bits.
 - Reject `alg: none` and symmetric algorithms such as HS256.
-- Verify assertions only with keys from the personal agent's verified `jwks_uri`
-  ([4.1](/docs/spec#agent-identity)). Ignore `jku`, `x5u`, and any key embedded in an assertion.
-  DPoP proofs are the one exception: the public key in their `jwk` header is how they work
-  ([4.3](/docs/spec#sending-tokens)).
+- Verify delegations only with keys from the personal agent's verified `jwks_uri`, and assertions
+  only with the key their verified delegation names in `cnf.jwk`
+  ([4.1](/docs/spec#delegated-keys)). Ignore `jku`, `x5u`, and any other key embedded in an
+  assertion. DPoP proofs are the one other exception: the public key in their `jwk` header is how
+  they work ([4.3](/docs/spec#sending-tokens)).
 - Check `aud`, `exp`, and `iat`. A client assertion or Session assertion has the company's
   `auth.issuer` as its `aud`, never an endpoint URL ([4.1](/docs/spec#agent-identity)). Allow a
   small clock skew, such as 30 seconds, and reject assertions that claim a long lifetime.
@@ -55,10 +56,13 @@ Assertions and DPoP proofs are JWTs. To sign and verify them consistently:
 
 ### Rotating keys {#both-key-rotation}
 
-- Give every key a `kid`.
-- Publish a new key in `jwks_uri` before signing with it, early enough for companies' caches to pick
-  it up.
-- Keep an old public key published until everything signed with it has expired.
+- Give every key in `jwks_uri` a `kid`.
+- Publish a new key in `jwks_uri` before signing delegations with it, early enough for companies'
+  caches to pick it up.
+- Keep an old public key published until every delegation signed with it has expired.
+- Personal agents: rotate delegated keys as often as you like. Each assertion carries its own
+  delegation, so companies don't depend on a delegated key lasting
+  ([4.1](/docs/spec#delegated-keys)).
 - Companies refetch `jwks_uri` when they see an unknown `kid`. The refetch happens before any
   signature is checked, so anyone can trigger it by naming a real personal agent and a made-up
   `kid`. Refetch each `jwks_uri` at most once per interval, such as 30 seconds, and count failed

@@ -1,8 +1,11 @@
 // The test Personal Agent's identity, kept in .poppy/ in the current directory:
 //
-//   private-key.jwk   the ES256 signing key (mode 0600, never printed)
+//   private-key.jwk   the ES256 key in jwks.json, which signs delegations (mode 0600, never printed)
 //   agent.json        client metadata, hosted at <base-url>/agent.json
-//   jwks.json         the public key, hosted at <base-url>/jwks.json
+//   jwks.json         its public key, hosted at <base-url>/jwks.json
+//
+// Each run creates a delegated key in memory, with a delegation signed by that key, and signs its
+// assertions with the delegated key (spec 4.1).
 //   config.json       client_id, and a random User ID for each Company issuer
 //   last-results.json the latest check results, without secrets
 
@@ -22,6 +25,7 @@ import {
     generateKey,
     importPrivateJwk,
     randomId,
+    signDelegation,
     thumbprint,
     type EcPrivateJwk,
     type EcPublicJwk,
@@ -42,7 +46,11 @@ export type Identity = {
     clientId: string;
     jwksUri: string;
     redirectUri: string;
+    // The key in jwks.json. It signs only delegations.
+    rootKey: SigningKey;
+    // The delegated key that signs assertions, and the delegation that vouches for it.
     key: SigningKey;
+    delegation: string;
     agent: Record<string, unknown>;
     jwks: { keys: EcPublicJwk[] };
     config: Config;
@@ -189,13 +197,25 @@ export async function loadIdentity(
         };
         const config = JSON.parse(readFileSync(join(dir, "config.json"), "utf8")) as Config;
         config.user_ids ??= {};
-        const key = await importPrivateJwk(privateJwk);
+        const rootKey = await importPrivateJwk(privateJwk);
+        const generated = await generateKey(false);
+        const key: SigningKey = {
+            privateKey: generated.privateKey,
+            publicJwk: { ...generated.publicJwk, kid: await thumbprint(generated.publicJwk) },
+        };
+        const delegation = await signDelegation({
+            root: rootKey,
+            delegated: key.publicJwk,
+            iss: String(agent.client_id),
+        });
         return {
             dir,
             clientId: String(agent.client_id),
             jwksUri: String(agent.jwks_uri),
             redirectUri: Array.isArray(agent.redirect_uris) ? String(agent.redirect_uris[0]) : "",
+            rootKey,
             key,
+            delegation,
             agent,
             jwks,
             config,
@@ -279,7 +299,7 @@ export async function verifyHosted(identity: Identity, http: Http): Promise<stri
         );
     } else {
         const keys = (jwksEx.json as { keys?: unknown } | undefined)?.keys;
-        const local = identity.key.publicJwk;
+        const local = identity.rootKey.publicJwk;
         if (!Array.isArray(keys)) {
             problems.push(
                 `${identity.jwksUri} isn't a JWK Set (no "keys" array). Host .poppy/jwks.json there unchanged.`,

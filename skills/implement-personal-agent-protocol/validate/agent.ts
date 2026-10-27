@@ -39,6 +39,7 @@ export function clientAssertion(ctx: Context, key?: SigningKey, aud?: string): P
     const identity = ctx.identity!;
     return signAssertion({
         key: key ?? identity.key,
+        delegation: identity.delegation,
         iss: identity.clientId,
         sub: identity.clientId,
         aud: aud ?? issuer(ctx),
@@ -49,6 +50,8 @@ export function sessionAssertion(
     ctx: Context,
     options: {
         key?: SigningKey;
+        // The delegation to send, or null for none. Defaults to the identity's (spec 4.1).
+        delegation?: string | null;
         typ?: string;
         jti?: string;
         sub?: string;
@@ -58,6 +61,7 @@ export function sessionAssertion(
     const identity = ctx.identity!;
     return signAssertion({
         key: options.key ?? identity.key,
+        delegation: options.delegation === undefined ? identity.delegation : options.delegation,
         iss: identity.clientId,
         sub: options.sub ?? userId(ctx),
         aud: issuer(ctx),

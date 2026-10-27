@@ -1,0 +1,66 @@
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "delegation.schema.json",
+    "title": "Delegation",
+    "description": "A delegation as its decoded JWT header and payload: signed by a key in the Personal Agent's jwks_uri, it vouches for the delegated key in cnf.jwk (RFC 7800), which signs the Personal Agent's client and Session assertions. Spec section 4.1 (Delegated keys). exp is at most 24 hours after iat. The header and payload are also available on their own as delegation.schema.json#/$defs/header and #/$defs/payload, and the header of an assertion that carries a delegation as #/$defs/assertionHeader.",
+    "type": "object",
+    "required": ["header", "payload"],
+    "properties": {
+        "header": { "$ref": "#/$defs/header" },
+        "payload": { "$ref": "#/$defs/payload" }
+    },
+    "$defs": {
+        "header": {
+            "type": "object",
+            "required": ["alg", "typ", "kid"],
+            "properties": {
+                "alg": { "type": "string", "not": { "enum": ["none", "HS256", "HS384", "HS512"] } },
+                "typ": { "const": "pap-delegation+jwt" },
+                "kid": { "type": "string", "minLength": 1 }
+            }
+        },
+        "payload": {
+            "type": "object",
+            "required": ["iss", "cnf", "iat", "exp", "jti"],
+            "properties": {
+                "iss": { "type": "string", "pattern": "^https://[^\\s/?#]+" },
+                "cnf": {
+                    "type": "object",
+                    "required": ["jwk"],
+                    "properties": {
+                        "jwk": {
+                            "type": "object",
+                            "required": ["kty"],
+                            "properties": {
+                                "kty": { "type": "string" },
+                                "d": false,
+                                "p": false,
+                                "q": false,
+                                "dp": false,
+                                "dq": false,
+                                "qi": false,
+                                "k": false
+                            }
+                        }
+                    }
+                },
+                "iat": { "type": "integer", "minimum": 0 },
+                "exp": { "type": "integer", "minimum": 0 },
+                "jti": { "type": "string", "minLength": 22 },
+                "sub": false,
+                "aud": false,
+                "agent_id": false
+            }
+        },
+        "assertionHeader": {
+            "type": "object",
+            "required": ["alg", "kid", "pap_dlg"],
+            "properties": {
+                "alg": { "type": "string", "not": { "enum": ["none", "HS256", "HS384", "HS512"] } },
+                "typ": { "type": "string" },
+                "kid": { "type": "string", "minLength": 1 },
+                "pap_dlg": { "type": "string", "minLength": 1 }
+            }
+        }
+    }
+}

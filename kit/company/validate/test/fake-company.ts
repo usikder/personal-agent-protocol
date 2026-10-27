@@ -5,7 +5,15 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { PROTOCOL_VERSION } from "../catalog.ts";
 import type { FetchLike } from "../http.ts";
-import { decodeJwt, randomId, sha256, thumbprint, verifyJwt, type EcPublicJwk } from "../jose.ts";
+import {
+    decodeJwt,
+    randomId,
+    sha256,
+    thumbprint,
+    verifyDelegated,
+    verifyJwt,
+    type EcPublicJwk,
+} from "../jose.ts";
 
 export type Flaws = {
     acceptReplayedTokenProof?: boolean;
@@ -115,8 +123,13 @@ export function fakeCompany(agentDir: string, flaws: Flaws = {}): FetchLike {
         return thumbprint(jwk);
     }
 
-    async function agentKey(): Promise<EcPublicJwk> {
-        return (JSON.parse(agentFile("jwks.json")) as { keys: EcPublicJwk[] }).keys[0];
+    // Verifies an assertion signed with a delegated key against the agent's jwks.json (spec 4.1).
+    async function verifyAssertion(jwt: string) {
+        const roots = (JSON.parse(agentFile("jwks.json")) as { keys: EcPublicJwk[] }).keys;
+        const clientId = String(
+            (JSON.parse(agentFile("agent.json")) as { client_id: string }).client_id,
+        );
+        return verifyDelegated(jwt, roots, clientId);
     }
 
     async function tokenEndpoint(headers: Headers, body: string): Promise<Response> {
@@ -132,9 +145,8 @@ export function fakeCompany(agentDir: string, flaws: Flaws = {}): FetchLike {
             return json(400, { error: "use_dpop_nonce" }, { "dpop-nonce": nonce });
         if (!result) return json(400, { error: "invalid_dpop_proof" });
         const jkt = result;
-        const key = await agentKey();
         const clientAssertion = form.get("client_assertion") ?? "";
-        const client = await verifyJwt(clientAssertion, key);
+        const client = await verifyAssertion(clientAssertion);
         if (!client) return json(401, { error: "invalid_client" });
         const audiences = flaws.acceptTokenEndpointAud ? [ORIGIN, TOKEN] : [ORIGIN];
         if (!audiences.includes(String(client.payload.aud)))
@@ -152,7 +164,7 @@ export function fakeCompany(agentDir: string, flaws: Flaws = {}): FetchLike {
             if (!flaws.dpopAtBearerMcp) type = "Bearer";
         } else if (grant === "urn:ietf:params:oauth:grant-type:jwt-bearer") {
             const assertion = form.get("assertion") ?? "";
-            const verified = await verifyJwt(assertion, key);
+            const verified = await verifyAssertion(assertion);
             if (!verified || verified.payload.aud !== ORIGIN)
                 return json(400, { error: "invalid_grant" });
             const jti = String(verified.payload.jti);

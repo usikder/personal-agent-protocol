@@ -14,8 +14,9 @@ What Poppy adds to standard OAuth, which
 [4.10](https://personalagentprotocol.org/docs/spec#oauth-additions) summarizes:
 
 - Clients identified by an HTTPS URL that returns their metadata, authenticated with
-  `private_key_jwt` using keys from their `jwks_uri`
-  ([4.1](https://personalagentprotocol.org/docs/spec#agent-identity)).
+  `private_key_jwt`. Assertions are signed with a delegated key, and the delegation in their
+  `pap_dlg` header is signed by a key from the client's `jwks_uri`, so the server verifies two
+  signatures ([4.1](https://personalagentprotocol.org/docs/spec#delegated-keys)).
 - The JWT bearer grant to start a signed-out Session, with the User ID in `sub`.
 - Sessions named by the thumbprint of their DPoP key, the Session Key: a known key renews or signs
   in its Session, and a new key starts one. Every token request has a proof.
