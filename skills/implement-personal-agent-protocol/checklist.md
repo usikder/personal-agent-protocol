@@ -507,6 +507,20 @@ If you offer mediated sign-in, protect the credentials you accept (Mediated Sign
 - [ ] **MUST**: Whichever revision is approved, the Company MUST perform each operation at most once (7).
 - [ ] **SHOULD**: `expires_at` SHOULD leave the User long enough to read the terms and decide, unless the Company can't hold the terms that long, such as a price or a seat that can sell out.
 
+### Operations: [3.1 Rich summaries](https://personalagentprotocol.org/docs/0.4/extensions/operations#rich-summaries)
+
+- [ ] **MUST**: The Company MUST give every object a non-empty `style` string that identifies its format; the style defines the other fields and how versions are identified.
+- [ ] **SHOULD**: A Company that defines its own style SHOULD use a name under a domain it controls, such as `com.example.booking_change`, and publish its format.
+- [ ] **MUST**: The Company MUST keep `summary` complete and required, including when it supplies rich objects.
+- [ ] **MUST**: The Company MUST make every rich object agree with `summary` and with `terms` if present.
+
+### Operations: [Checkout](https://personalagentprotocol.org/docs/0.4/extensions/operations#checkout-summary)
+
+- [ ] **SHOULD**: A Company that supports UCP checkout SHOULD use its native checkout and approval flow.
+- [ ] **MUST**: The Company MUST provide the complete checkout response shape for that version, including `ucp`, `id`, `status`, `currency`, `line_items`, `totals`, and `links`.
+- [ ] **MUST**: The Company MUST set `checkout.ucp.version` to `2026-08-25` for this definition.
+- [ ] **MUST NOT**: The Company MUST NOT include payment credentials or `actions` in this summary object.
+
 ### Operations: [6. Sending the approval](https://personalagentprotocol.org/docs/0.4/extensions/operations#sending-approval)
 
 - [ ] **MUST NOT**: A Company MAY record `approved_at` and `input_type`, and MUST NOT reject an approval because either is missing or because it doesn't recognize the `input_type`.

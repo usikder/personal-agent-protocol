@@ -88,6 +88,12 @@ Breaking · [Spec 8.12](https://personalagentprotocol.org/docs/0.4/spec#closing)
 
 A close returns HTTP 202 instead of 200. The Company MAY act on any request it hasn't acted on yet or drop it, whether it accepted the request before or after the close, and the Personal Agent MUST NOT depend on either. To be sure earlier requests are acted on, it reads until `working` is `false` before closing. After a close, handoff cancels also return `conversation_closed`.
 
+#### Operations: optional rich summaries
+
+[Operations 3](https://personalagentprotocol.org/docs/0.4/extensions/operations#operation-object) · [Operations 3.1](https://personalagentprotocol.org/docs/0.4/extensions/operations#rich-summaries) · [Operations 3.2](https://personalagentprotocol.org/docs/0.4/extensions/operations#recommended-summaries) · [Operations 5](https://personalagentprotocol.org/docs/0.4/extensions/operations#approval) · [Operations 8](https://personalagentprotocol.org/docs/0.4/extensions/operations#security)
+
+An Operation may include `rich_summary`, an array of objects whose `style` identifies their rendering format. `summary` stays required and complete as the text fallback. A Personal Agent may render recognized objects, but shows the full text when it skips an unknown or invalid object, or the rich view does not show all approval terms. Material changes to rich terms need a new revision. The first recommended style, `ucp.checkout`, references the versioned UCP checkout and fulfillment schemas so non-UCP interfaces can share checkout rendering while keeping Operations approval. Native UCP checkout keeps its own approval flow.
+
 ### Minor changes
 
 #### `auth.disabled` without other clients

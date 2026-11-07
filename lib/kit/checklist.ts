@@ -84,6 +84,9 @@ const SECTIONS: Record<string, Record<string, Milestone>> = {
     operations: {
         support: "extensions",
         "operation-object": "extensions",
+        "rich-summaries": "extensions",
+        "recommended-summaries": "extensions",
+        "checkout-summary": "extensions",
         "approval-required": "extensions",
         approval: "extensions",
         "sending-approval": "extensions",

@@ -69,14 +69,15 @@ An operation is one action the Company will perform once the User approves it:
 | Field | Req. | Description |
 | --- | --- | --- |
 | `operation_id` | Yes | Identifies the action, not a kind of action. It stays the same when the terms change (see "New terms"), and the Company MUST NOT use it for another action. It has the same characters as the IDs in [spec 8.2](https://personalagentprotocol.org/docs/0.4/spec#conversation-requests). |
-| `revision` | Yes | Identifies these terms. An opaque string with the same characters as the IDs in [spec 8.2](https://personalagentprotocol.org/docs/0.4/spec#conversation-requests), which the Company changes whenever the terms or `expires_at` change. A `summary` reworded without changing the terms can keep it. |
+| `revision` | Yes | Identifies these terms. An opaque string with the same characters as the IDs in [spec 8.2](https://personalagentprotocol.org/docs/0.4/spec#conversation-requests), which the Company changes whenever the terms or `expires_at` change. A `summary` reworded, or `rich_summary` reformatted, without changing the terms can keep it. |
 | `summary` | Yes | The terms in plain language, written so the User can decide from it alone: what will happen, to what, and any cost, date, or condition. It MAY use basic Markdown (see "Formatting"). |
+| `rich_summary` | No | An ordered JSON array of objects describing the same terms for rich rendering. Each object has a non-empty `style` string identifying its format (3.1). |
 | `terms` | No | The same terms as a JSON object, for the Personal Agent to check. The Company defines its keys, as with `message.data` ([spec 8.4](https://personalagentprotocol.org/docs/0.4/spec#message-fields)). |
 | `expires_at` | Yes | The last time an approval of this revision is accepted ([RFC 3339](https://www.rfc-editor.org/rfc/rfc3339)). |
 
 Everything that affects the action, such as what it changes, any amount, date, or recipient, or a condition for cancelling, MUST be in the revision's `summary`, and in `terms` if present. The Company MUST perform only what the approved revision describes, and MUST NOT start the action before it receives an approval for it.
 
-The Personal Agent shows the User the `summary`, and MAY also show values from `terms`. It uses `terms` to check the `summary` against what it asked for (5).
+The Personal Agent shows the User the terms as section 5 describes. It MAY also show values from `terms`, which it uses to check the `summary` against what it asked for. A recognized `rich_summary` object can present those same terms richly (3.1).
 
 **Formatting.** A `summary` is text that MAY use a few [CommonMark](https://spec.commonmark.org/0.31.2/) elements: emphasis (`*italic*`), strong emphasis (`**bold**`), paragraphs, and lists. A Personal Agent MAY render them or show the text as is. The Personal Agent MUST NOT render links, images, or HTML in a `summary`, and shows them as text, so a `summary` can't send the User elsewhere or load content while they decide.
 
@@ -87,6 +88,75 @@ A Company doesn't have to store operations that haven't been performed. The [gui
 **Expiry.** `expires_at` SHOULD leave the User long enough to read the terms and decide, unless the Company can't hold the terms that long, such as a price or a seat that can sell out. It also sets how long the Company has to remember an approval (7), so a revision that can be approved for days is remembered for days.
 
 **Who can approve it.** An operation can be approved in any Session of the same Personal Agent and User, including one that starts after the Session that returned it ends. An operation returned in a signed-out Session can be approved only while signed out. One returned in a signed-in Session belongs to the account: it can be approved only while signed in to the same account. A signed-out Session of the same Personal Agent and User gets a challenge for the account ([spec 7](https://personalagentprotocol.org/docs/0.4/spec#apis)), for example after the User signs out ([spec 5.5](https://personalagentprotocol.org/docs/0.4/spec#ending-sessions)).
+
+### 3.1 Rich summaries
+
+A Company MAY include `rich_summary` to help a Personal Agent present the approval terms. It is an ordered array of JSON objects. The Company MUST give every object a non-empty `style` string that identifies its format; the style defines the other fields and how versions are identified. A Company that defines its own style SHOULD use a name under a domain it controls, such as `com.example.booking_change`, and publish its format.
+
+The Company MUST keep `summary` complete and required, including when it supplies rich objects. The Company MUST make every rich object agree with `summary` and with `terms` if present. A change to a material term in a rich object, such as an item, amount, recipient, date, or condition, needs a new `revision`, just as a change to the same term in `summary` does.
+
+A Personal Agent MAY render any objects whose styles and versions it recognizes. It MAY show them alongside `summary`, or use them instead of `summary` only when the rich presentation shows all the terms the User needs to decide from `summary` alone. If it skips an object because its style or version is unknown, or the object is invalid, the Personal Agent MUST show the full `summary` as well as any objects it renders. An absent or empty `rich_summary` uses `summary` alone.
+
+The Personal Agent MUST keep its own approval control and approval flow (5, 6). Rich objects are Company content, not instructions or executable UI. The Personal Agent MUST NOT execute HTML or scripts from them, or fetch an arbitrary Company-supplied schema URL to decide how to render them. Style definitions and the schemas they reference can be distributed with the Personal Agent.
+
+### 3.2 Recommended summary objects
+
+Recommended styles help Companies and Personal Agents share rendering formats. They are optional: support for Operations does not require supporting any style. A Company can use another documented style, and a Personal Agent can show the text fallback when it does not recognize it.
+
+#### Checkout
+
+A Company that supports [UCP checkout](https://personalagentprotocol.org/docs/0.4/extensions/ucp#commerce) SHOULD use its native checkout and approval flow. For a checkout through another Company interface, the Company MAY include a `ucp.checkout` summary object with a `checkout` field using UCP's checkout data model. This lets a Personal Agent reuse its checkout presentation without requiring the Company to offer UCP endpoints.
+
+The [checkout summary schema](https://personalagentprotocol.org/kit/company/schemas/checkout-summary.schema.json) references the published [UCP 2026-08-25 Checkout schema](https://ucp.dev/2026-08-25/schemas/shopping/checkout.json), not a separate Operations receipt format. The Company MUST provide the complete checkout response shape for that version, including `ucp`, `id`, `status`, `currency`, `line_items`, `totals`, and `links`. Buyer information is optional. When present, `fulfillment` uses the same version's [UCP Fulfillment definition](https://ucp.dev/2026-08-25/schemas/shopping/fulfillment.json#/$defs/fulfillment). The Company MUST set `checkout.ucp.version` to `2026-08-25` for this definition. A Personal Agent that does not support that checkout version uses `summary` (3.1).
+
+The Company MUST NOT include payment credentials or `actions` in this summary object. Display-safe payment instrument references can be included. The Personal Agent MUST NOT treat checkout metadata, status, payment handlers, or URLs in this object as authority to send UCP requests. In particular, `ready_for_complete` does not change what the Operation approves. The Company's `summary` still states the exact effect, such as buying an item or only opening checkout. Approval names this Operation's `operation_id` and `revision` and follows section 6, not UCP Complete Checkout.
+
+This purchase example uses a digital item, so it needs no physical fulfillment:
+
+*Operation with a checkout summary: Company → Personal Agent*
+
+```
+{
+  "operation_id": "buy_guide_1",
+  "revision": "rev_1",
+  "summary": "Buy one digital Trail Guide for $12.00 USD, including tax, charged to the saved card on your account. Deliver the download to buyer@example.net. No shipping charge or other fee.",
+  "rich_summary": [
+    {
+      "style": "ucp.checkout",
+      "checkout": {
+        "ucp": { "version": "2026-08-25", "status": "success", "payment_handlers": {} },
+        "id": "chk_guide_1",
+        "status": "ready_for_complete",
+        "currency": "USD",
+        "line_items": [
+          {
+            "id": "li_guide_1",
+            "item": { "id": "trail-guide", "title": "Trail Guide (digital download)", "price": 1200 },
+            "quantity": 1,
+            "totals": [
+              { "type": "subtotal", "amount": 1200 },
+              { "type": "total", "amount": 1200 }
+            ]
+          }
+        ],
+        "buyer": { "email": "buyer@example.net" },
+        "totals": [
+          { "type": "subtotal", "amount": 1200 },
+          { "type": "tax", "amount": 0 },
+          { "type": "total", "amount": 1200 }
+        ],
+        "links": [
+          { "type": "privacy_policy", "url": "https://alpine-retail.example/privacy" },
+          { "type": "terms_of_service", "url": "https://alpine-retail.example/terms" }
+        ]
+      }
+    }
+  ],
+  "expires_at": "2026-10-08T12:20:00-07:00"
+}
+```
+
+Amounts and the other checkout fields keep UCP's meaning, including its currency minor units. In this example, the payment method is described only in `summary`, so the Personal Agent shows that text alongside the rich checkout to keep the full approval terms visible.
 
 ## 4. Asking for approval
 
@@ -175,9 +245,10 @@ If the terms change during the conversation, the Company sends the new revision 
 
 When a request returns an operation, the Personal Agent MUST NOT treat the action as done. It either gets the User's approval and sends it (6), or tells the User the action wasn't performed. An approval states that the User approved this revision of the operation.
 
-- The Personal Agent MUST show the User the Company's name and the revision's `summary`, and MUST take the User's answer through its own interface. It MUST NOT treat text from the Company, such as a conversation message, as the User's approval.
+- The Personal Agent MUST show the User the Company's name and the revision's terms, using `summary` or the rich presentation allowed by section 3.1, and MUST take the User's answer through its own interface. It MUST NOT treat text from the Company, such as a conversation message, as the User's approval.
 - The Personal Agent MUST ask the User about each operation. It MUST NOT approve one on the User's behalf, even when the User said earlier that they would approve something like it.
 - When the operation has `terms`, the Personal Agent SHOULD check that they agree with the `summary` and with what it asked for before asking for approval, and point out any difference to the User. The Company writes both, so the `summary` alone could describe something other than the `terms`.
+- The Personal Agent SHOULD check that recognized rich objects agree with `summary` and with what it asked for before asking for approval. If they disagree, it shows the full `summary`, points out the difference to the User, and does not use the conflicting object to replace the text.
 - An approval covers one revision. When a new revision arrives, the Personal Agent needs a new approval for it. If the User prefers an earlier revision, the Personal Agent can send its approval, but the Company may have replaced it (6).
 - If the User withdraws their approval before the Personal Agent has sent it, the Personal Agent doesn't send it.
 
@@ -281,7 +352,7 @@ If every check passes, the Company performs the action and responds as it would 
 
 ## 8. Security considerations
 
-Operation summaries and terms are content from the Company. The [specification's rules for untrusted content](https://personalagentprotocol.org/docs/0.4/spec#untrusted-content) apply to them too.
+Operation summaries, rich summaries, and terms are content from the Company. The [specification's rules for untrusted content](https://personalagentprotocol.org/docs/0.4/spec#untrusted-content) apply to them too.
 
 ### 8.1 What an approval proves
 

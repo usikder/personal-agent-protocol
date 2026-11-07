@@ -148,6 +148,18 @@ before closing. After a close, handoff cancels also return `conversation_closed`
 
 </Change>
 
+<Change title="Operations: optional rich summaries" sections="Operations 3, Operations 3.1, Operations 3.2, Operations 5, Operations 8">
+
+An Operation may include `rich_summary`, an array of objects whose `style` identifies their
+rendering format. `summary` stays required and complete as the text fallback. A Personal Agent may
+render recognized objects, but shows the full text when it skips an unknown or invalid object, or
+the rich view does not show all approval terms. Material changes to rich terms need a new revision.
+The first recommended style, `ucp.checkout`, references the versioned UCP checkout and fulfillment
+schemas so non-UCP interfaces can share checkout rendering while keeping Operations approval.
+Native UCP checkout keeps its own approval flow.
+
+</Change>
+
 ### Minor changes {#v0-4-minor}
 
 <Change title="`auth.disabled` without other clients" sections="3.2, guides#company-without-oauth, guides#company-agent-issuer" issue="67">

@@ -9,6 +9,17 @@
         "operation_id": { "$ref": "message.schema.json#/$defs/id" },
         "revision": { "$ref": "message.schema.json#/$defs/id" },
         "summary": { "type": "string", "minLength": 1 },
+        "rich_summary": {
+            "type": "array",
+            "description": "Optional rich views of the same approval terms. Unknown styles do not replace the required text summary.",
+            "items": {
+                "type": "object",
+                "required": ["style"],
+                "properties": {
+                    "style": { "type": "string", "minLength": 1 }
+                }
+            }
+        },
         "terms": { "type": "object" },
         "expires_at": {
             "type": "string",

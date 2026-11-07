@@ -30,6 +30,33 @@ test("every schema file parses and declares 2020-12", () => {
     }
 });
 
+test("rich summaries preserve the text fallback and allow unknown styles", () => {
+    const operation = {
+        operation_id: "buy_1",
+        revision: "rev_1",
+        summary: "Buy one guide for $12.00 USD.",
+        expires_at: "2026-10-08T12:20:00-07:00",
+    };
+    assert.deepEqual(check("operation.schema.json", operation), []);
+    for (const rich_summary of [
+        [],
+        [{ style: "com.example.checkout", checkout: { id: "quote_1" } }],
+        [{ style: "com.example.receipt", items: [{ title: "Guide" }] }],
+    ]) {
+        assert.deepEqual(check("operation.schema.json", { ...operation, rich_summary }), []);
+    }
+    const { summary: _summary, ...withoutText } = operation;
+    assert.ok(
+        check("operation.schema.json", {
+            ...withoutText,
+            rich_summary: [{ style: "com.example.receipt", title: "Guide" }],
+        }).some((error) => error.path === "/summary"),
+    );
+    for (const rich_summary of [[{}], [{ style: "" }], [{ style: 1 }], ["receipt"], {}]) {
+        assert.ok(check("operation.schema.json", { ...operation, rich_summary }).length > 0);
+    }
+});
+
 test("a valid poppy.json passes", () => {
     assert.deepEqual(check("poppy.schema.json", poppy), []);
 });

@@ -1,0 +1,41 @@
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "checkout-summary.schema.json",
+    "title": "UCP checkout rich summary",
+    "description": "The ucp.checkout summary style: UCP 2026-08-25 checkout data for rendering an Operation, without advertising UCP services or changing the approval flow.",
+    "type": "object",
+    "required": ["style", "checkout"],
+    "properties": {
+        "style": { "const": "ucp.checkout" },
+        "checkout": {
+            "allOf": [
+                { "$ref": "https://ucp.dev/2026-08-25/schemas/shopping/checkout.json" },
+                {
+                    "type": "object",
+                    "properties": {
+                        "ucp": {
+                            "properties": {
+                                "version": { "const": "2026-08-25" }
+                            }
+                        },
+                        "fulfillment": {
+                            "$ref": "https://ucp.dev/2026-08-25/schemas/shopping/fulfillment.json#/$defs/fulfillment"
+                        },
+                        "payment": {
+                            "properties": {
+                                "instruments": {
+                                    "items": {
+                                        "properties": {
+                                            "credential": false
+                                        }
+                                    }
+                                }
+                            }
+                        },
+                        "actions": false
+                    }
+                }
+            ]
+        }
+    }
+}
