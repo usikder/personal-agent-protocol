@@ -507,6 +507,22 @@ If you offer mediated sign-in, protect the credentials you accept (Mediated Sign
 - [ ] **MUST**: Whichever revision is approved, the Company MUST perform each operation at most once (7).
 - [ ] **SHOULD**: `expires_at` SHOULD leave the User long enough to read the terms and decide, unless the Company can't hold the terms that long, such as a price or a seat that can sell out.
 
+### Operations: [3.1 Rich summaries](https://personalagentprotocol.org/docs/0.4/extensions/operations#rich-summaries)
+
+- [ ] **MUST**: The Company MUST give every object a non-empty `style` string that identifies its format; the style defines the other fields and how versions are identified.
+- [ ] **SHOULD**: A Company that defines its own style SHOULD use a name under a domain it controls, such as `com.example.booking_change`, and publish its format.
+- [ ] **MUST**: The Company MUST keep `summary` complete and required, including when it supplies rich objects.
+- [ ] **MUST**: The Company MUST make every rich object agree with `summary` and with `terms` if present.
+
+### Operations: [Checkout](https://personalagentprotocol.org/docs/0.4/extensions/operations#checkout-summary)
+
+- [ ] **SHOULD**: A Company that supports the UCP extension SHOULD use UCP for purchases instead of this object.
+- [ ] **MUST**: The Company MUST use one currency for every amount in the object.
+- [ ] **MUST**: The Company MUST list every continuing commitment the purchase creates in `obligations`, and state it in `summary`.
+- [ ] **MUST**: When an item has both `unit_amount` and `line_total`, the Company MUST make its `line_total` equal `unit_amount` times `quantity`.
+- [ ] **MUST**: When the object has `subtotal` and every item has `line_total`, the Company MUST make `subtotal` equal their sum.
+- [ ] **MUST NOT**: The Company MUST NOT include payment credentials in the object: `payment_method` describes how it collects payment, and carries nothing that can be used to pay.
+
 ### Operations: [6. Sending the approval](https://personalagentprotocol.org/docs/0.4/extensions/operations#sending-approval)
 
 - [ ] **MUST NOT**: A Company MAY record `approved_at` and `input_type`, and MUST NOT reject an approval because either is missing or because it doesn't recognize the `input_type`.

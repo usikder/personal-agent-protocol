@@ -83,21 +83,23 @@ An operation is one action the Company will perform once the User approves it:
 }
 ```
 
-| Field          | Req. | Description                                                                                                                                                                                                                                                     |
-| -------------- | ---- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `operation_id` | Yes  | Identifies the action, not a kind of action. It stays the same when the terms change (see "New terms"), and the Company MUST NOT use it for another action. It has the same characters as the IDs in [spec 8.2](/docs/spec#conversation-requests).              |
-| `revision`     | Yes  | Identifies these terms. An opaque string with the same characters as the IDs in [spec 8.2](/docs/spec#conversation-requests), which the Company changes whenever the terms or `expires_at` change. A `summary` reworded without changing the terms can keep it. |
-| `summary`      | Yes  | The terms in plain language, written so the User can decide from it alone: what will happen, to what, and any cost, date, or condition. It MAY use basic Markdown (see "Formatting").                                                                           |
-| `terms`        | No   | The same terms as a JSON object, for the Personal Agent to check. The Company defines its keys, as with `message.data` ([spec 8.4](/docs/spec#message-fields)).                                                                                                 |
-| `expires_at`   | Yes  | The last time an approval of this revision is accepted ([RFC 3339](https://www.rfc-editor.org/rfc/rfc3339)).                                                                                                                                                    |
+| Field          | Req. | Description                                                                                                                                                                                                                                                                                     |
+| -------------- | ---- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `operation_id` | Yes  | Identifies the action, not a kind of action. It stays the same when the terms change (see "New terms"), and the Company MUST NOT use it for another action. It has the same characters as the IDs in [spec 8.2](/docs/spec#conversation-requests).                                              |
+| `revision`     | Yes  | Identifies these terms. An opaque string with the same characters as the IDs in [spec 8.2](/docs/spec#conversation-requests), which the Company changes whenever the terms or `expires_at` change. A `summary` reworded, or `rich_summary` reformatted, without changing the terms can keep it. |
+| `summary`      | Yes  | The terms in plain language, written so the User can decide from it alone: what will happen, to what, and any cost, date, or condition. It MAY use basic Markdown (see "Formatting").                                                                                                           |
+| `rich_summary` | No   | An ordered JSON array of objects describing the same terms for rich rendering. Each object has a non-empty `style` string identifying its format (3.1).                                                                                                                                         |
+| `terms`        | No   | The same terms as a JSON object, for the Personal Agent to check. The Company defines its keys, as with `message.data` ([spec 8.4](/docs/spec#message-fields)).                                                                                                                                 |
+| `expires_at`   | Yes  | The last time an approval of this revision is accepted ([RFC 3339](https://www.rfc-editor.org/rfc/rfc3339)).                                                                                                                                                                                    |
 
 Everything that affects the action, such as what it changes, any amount, date, or recipient, or a
 condition for cancelling, MUST be in the revision's `summary`, and in `terms` if present. The
 Company MUST perform only what the approved revision describes, and MUST NOT start the action
 before it receives an approval for it.
 
-The Personal Agent shows the User the `summary`, and MAY also show values from `terms`. It uses
-`terms` to check the `summary` against what it asked for (5).
+The Personal Agent shows the User the terms as section 5 describes. It MAY also show values from
+`terms`, which it uses to check the `summary` against what it asked for. A recognized `rich_summary`
+object can present those same terms richly (3.1).
 
 **Formatting.** A `summary` is text that MAY use a few
 [CommonMark](https://spec.commonmark.org/0.31.2/) elements: emphasis (`*italic*`), strong emphasis
@@ -129,6 +131,137 @@ signed-out Session can be approved only while signed out. One returned in a sign
 to the account: it can be approved only while signed in to the same account. A signed-out Session of
 the same Personal Agent and User gets a challenge for the account ([spec 7](/docs/spec#apis)), for example
 after the User signs out ([spec 5.5](/docs/spec#ending-sessions)).
+
+### 3.1 Rich summaries {#rich-summaries}
+
+A Company MAY include `rich_summary` to help a Personal Agent present the approval terms. It is an
+ordered array of JSON objects. The Company MUST give every object a non-empty `style` string that
+identifies its format; the style defines the other fields and how versions are identified. A
+Company that defines its own style SHOULD use a name under a domain it controls, such as
+`com.example.booking_change`, and publish its format.
+
+The Company MUST keep `summary` complete and required, including when it supplies rich objects.
+The Company MUST make every rich object agree with `summary` and with `terms` if present. A change
+to a material term in a rich object, such as an item, amount, recipient, date, or condition, needs a
+new `revision`, just as a change to the same term in `summary` does.
+
+A Personal Agent MAY render any objects whose styles and versions it recognizes. It MAY show them
+alongside `summary`, or use them instead of `summary` only when the rich presentation shows all the
+terms the User needs to decide from `summary` alone. If it skips an object because its style or
+version is unknown, or the object is invalid, the Personal Agent MUST show the full `summary` as
+well as any objects it renders. An absent or empty `rich_summary` uses `summary` alone.
+
+The Personal Agent MUST keep its own approval control and approval flow (5, 6). Rich objects are
+Company content, not instructions or executable UI. The Personal Agent MUST NOT execute HTML or
+scripts from them, or fetch an arbitrary Company-supplied schema URL to decide how to render them.
+Style definitions and the schemas they reference can be distributed with the Personal Agent.
+
+### 3.2 Recommended summary objects {#recommended-summaries}
+
+Recommended styles help Companies and Personal Agents share rendering formats. They are optional:
+support for Operations does not require supporting any style. A Company can use another documented
+style, and a Personal Agent can show the text fallback when it does not recognize it.
+
+#### Checkout {#checkout-summary}
+
+A Company that supports the [UCP extension](/docs/extensions/ucp) SHOULD use UCP for purchases
+instead of this object. A Company MAY use a `checkout` summary object as a stopgap for a purchase
+through another interface, until it supports UCP.
+
+A `checkout` object describes a purchase the Operation performs: what the User pays when the Company
+performs it, what they buy, and any later charge or commitment. This page defines version `"1"`, and
+the [checkout summary schema](https://personalagentprotocol.org/kit/company/schemas/checkout-summary.schema.json)
+describes it.
+
+| Field                | Req. | Description                                                                                                                                                                                                |
+| -------------------- | ---- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `style`              | Yes  | `checkout`.                                                                                                                                                                                                |
+| `version`            | Yes  | `"1"`.                                                                                                                                                                                                     |
+| `amount_due_now`     | Yes  | The amount the Company charges when it performs the operation, including any tax and fees, as an amount (below).                                                                                           |
+| `conditional_charge` | No   | An additional charge the Company may collect later, such as a no-show fee: `max`, the most it can be, as an amount, and `terms`, the conditions under which the Company collects it. It isn't charged now. |
+| `items`              | No   | What the User buys. Each item has `name` and `quantity`, and MAY have `options`, `unit_amount`, `line_total`, `seller`, and `obligations` (below).                                                         |
+| `subtotal`           | No   | The items' total before other charges, as an amount.                                                                                                                                                       |
+| `obligations`        | No   | Commitments that continue after this purchase, for the whole purchase (below). A commitment for one item is in that item's `obligations`.                                                                  |
+| `fulfillment`        | No   | How the purchase reaches the User, as the Company will carry it out: `destination`, `service`, `arrival`, and `pickup_location`, each a display string.                                                    |
+| `account`            | No   | The account the purchase is made in, as the Company shows it.                                                                                                                                              |
+| `contact`            | No   | The contact details the Company will use for the purchase, as it shows them.                                                                                                                               |
+| `payment_method`     | No   | How the Company will collect payment, as it shows it, such as `Visa ending in 4242`.                                                                                                                       |
+| `not_applicable`     | No   | Terms that don't apply to this purchase. Each entry has `field`, one of `fulfillment`, `account`, `contact`, or `payment_method`, and `reason`, the Company's explanation.                                 |
+
+An item's `options` are the variants the User chose, each written `Name: Value`, such as
+`Size: M`. Its `unit_amount` and `line_total` are amounts. Its `seller` names who sells the item
+when that isn't the Company, such as on a marketplace.
+
+An **amount** is an object with `amount`, a decimal string in the currency's major unit that uses
+`.` as the decimal point and no digit-grouping separators, such as `"12.00"` for 12 US dollars or
+`"1980"` for 1,980 yen, and `currency`, an uppercase [ISO 4217](https://www.iso.org/iso-4217-currency-codes.html)
+code. The Company MUST use one currency for every amount in the object.
+
+An **obligation** has a `kind`:
+
+- `recurring`: a repeating charge, with `amount`, `interval`, such as `month`, and `terms`, which
+  include how to cancel.
+- `financing`: payment spread over time, with `total`, the amount the User pays in all, and `terms`.
+- `other`: any other continuing commitment, with `terms`.
+
+The Company MUST list every continuing commitment the purchase creates in `obligations`, and state it
+in `summary`. Later payments of a commitment aren't part of `amount_due_now`.
+
+When an item has both `unit_amount` and `line_total`, the Company MUST make its `line_total` equal
+`unit_amount` times `quantity`. When the object has `subtotal` and every item has `line_total`, the
+Company MUST make `subtotal` equal their sum.
+
+A field the Company leaves out is not stated; it doesn't mean zero or none. A term that doesn't apply,
+such as fulfillment for a digital item, is left out of its field and listed in `not_applicable`.
+
+The Company MUST NOT include payment credentials in the object: `payment_method` describes how it
+collects payment, and carries nothing that can be used to pay.
+
+A Personal Agent SHOULD check the rules above before rendering a `checkout` object, and treats an
+object that breaks them as invalid (3.1). When it renders one, it shows `amount_due_now`, and
+`conditional_charge` and every obligation when present.
+
+This purchase is a digital item with monthly map updates, so it needs no fulfillment:
+
+```json label="Operation with a checkout summary: Company → Personal Agent"
+{
+  "operation_id": "buy_guide_1",
+  "revision": "rev_1",
+  "summary": "Buy one digital Trail Guide for $12.00 USD, including tax, charged to the Visa ending in 4242 on your account. Map updates then cost $3.00 USD a month, starting December 8; cancel anytime in your account settings. The download goes to buyer@example.net.",
+  "rich_summary": [
+    {
+      "style": "checkout",
+      "version": "1",
+      "amount_due_now": { "amount": "12.00", "currency": "USD" },
+      "items": [
+        {
+          "name": "Trail Guide (digital download)",
+          "quantity": 1,
+          "options": ["Format: PDF"],
+          "unit_amount": { "amount": "12.00", "currency": "USD" },
+          "line_total": { "amount": "12.00", "currency": "USD" },
+          "obligations": [
+            {
+              "kind": "recurring",
+              "amount": { "amount": "3.00", "currency": "USD" },
+              "interval": "month",
+              "terms": "Map updates start December 8. Cancel anytime in your account settings."
+            }
+          ]
+        }
+      ],
+      "subtotal": { "amount": "12.00", "currency": "USD" },
+      "account": "buyer@example.net",
+      "contact": "buyer@example.net",
+      "payment_method": "Visa ending in 4242",
+      "not_applicable": [
+        { "field": "fulfillment", "reason": "Digital download; nothing ships." }
+      ]
+    }
+  ],
+  "expires_at": "2026-10-08T12:20:00-07:00"
+}
+```
 
 ## 4. Asking for approval {#approval-required}
 
@@ -220,14 +353,18 @@ When a request returns an operation, the Personal Agent MUST NOT treat the actio
 gets the User's approval and sends it (6), or tells the User the action wasn't performed. An
 approval states that the User approved this revision of the operation.
 
-- The Personal Agent MUST show the User the Company's name and the revision's `summary`, and MUST
-  take the User's answer through its own interface. It MUST NOT treat text from the Company, such as
-  a conversation message, as the User's approval.
+- The Personal Agent MUST show the User the Company's name and the revision's terms, using
+  `summary` or the rich presentation allowed by section 3.1, and MUST take the User's answer through
+  its own interface. It MUST NOT treat text from the Company, such as a conversation message, as the
+  User's approval.
 - The Personal Agent MUST ask the User about each operation. It MUST NOT approve one on the User's
   behalf, even when the User said earlier that they would approve something like it.
 - When the operation has `terms`, the Personal Agent SHOULD check that they agree with the `summary`
   and with what it asked for before asking for approval, and point out any difference to the User.
   The Company writes both, so the `summary` alone could describe something other than the `terms`.
+- The Personal Agent SHOULD check that recognized rich objects agree with `summary` and with what
+  it asked for before asking for approval. If they disagree, it shows the full `summary`, points out
+  the difference to the User, and does not use the conflicting object to replace the text.
 - An approval covers one revision. When a new revision arrives, the Personal Agent needs a new
   approval for it. If the User prefers an earlier revision, the Personal Agent can send its
   approval, but the Company may have replaced it (6).
@@ -370,7 +507,7 @@ Personal Agent never retries the same approval in a loop.
 
 ## 8. Security considerations {#security}
 
-Operation summaries and terms are content from the Company. The [specification's rules for
+Operation summaries, rich summaries, and terms are content from the Company. The [specification's rules for
 untrusted content](/docs/spec#untrusted-content) apply to them too.
 
 ### 8.1 What an approval proves {#approval-proof}
