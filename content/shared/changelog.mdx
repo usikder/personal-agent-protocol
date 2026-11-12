@@ -154,9 +154,9 @@ An Operation may include `rich_summary`, an array of objects whose `style` ident
 rendering format. `summary` stays required and complete as the text fallback. A Personal Agent may
 render recognized objects, but shows the full text when it skips an unknown or invalid object, or
 the rich view does not show all approval terms. Material changes to rich terms need a new revision.
-The first recommended style, `ucp.checkout`, references the versioned UCP checkout and fulfillment
-schemas so non-UCP interfaces can share checkout rendering while keeping Operations approval.
-Native UCP checkout keeps its own approval flow.
+The first recommended style, `checkout`, describes a purchase: the amount due now, items, any later
+charge, continuing commitments, and fulfillment, account, contact, and payment-method details.
+Companies that support UCP should use UCP instead; `checkout` is a stopgap for other interfaces.
 
 </Change>
 

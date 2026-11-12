@@ -57,6 +57,72 @@ test("rich summaries preserve the text fallback and allow unknown styles", () =>
     }
 });
 
+test("checkout summaries follow version 1 of the checkout style", () => {
+    const usd = (amount: string) => ({ amount, currency: "USD" });
+    const checkout = {
+        style: "checkout",
+        version: "1",
+        amount_due_now: usd("12.00"),
+        conditional_charge: { max: usd("25.00"), terms: "Charged if you miss your pickup." },
+        items: [
+            {
+                name: "Trail Guide",
+                quantity: 1,
+                options: ["Format: PDF"],
+                unit_amount: usd("12.00"),
+                line_total: usd("12.00"),
+                seller: "Alpine Maps",
+                obligations: [
+                    {
+                        kind: "recurring",
+                        amount: usd("3.00"),
+                        interval: "month",
+                        terms: "Cancel anytime in your account settings.",
+                    },
+                ],
+            },
+        ],
+        subtotal: usd("12.00"),
+        obligations: [{ kind: "financing", total: usd("12.00"), terms: "Four payments." }],
+        fulfillment: { destination: "Home", service: "Standard", arrival: "Nov 18" },
+        account: "buyer@example.net",
+        contact: "buyer@example.net",
+        payment_method: "Visa ending in 4242",
+        not_applicable: [{ field: "fulfillment", reason: "Digital download." }],
+    };
+    assert.deepEqual(check("checkout-summary.schema.json", checkout), []);
+    assert.deepEqual(
+        check("checkout-summary.schema.json", {
+            style: "checkout",
+            version: "1",
+            amount_due_now: { amount: "1980", currency: "JPY" },
+        }),
+        [],
+    );
+    for (const invalid of [
+        { ...checkout, version: "2" },
+        { ...checkout, style: "com.example.checkout" },
+        { ...checkout, amount_due_now: undefined },
+        { ...checkout, amount_due_now: 12 },
+        { ...checkout, amount_due_now: usd("1,200.00") },
+        { ...checkout, amount_due_now: usd("12,00") },
+        { ...checkout, amount_due_now: { amount: "12.00", currency: "usd" } },
+        { ...checkout, items: [{ name: "Trail Guide" }] },
+        { ...checkout, items: [{ name: "Trail Guide", quantity: 0 }] },
+        { ...checkout, obligations: [{ kind: "recurring", terms: "Monthly." }] },
+        { ...checkout, obligations: [{ kind: "lease", terms: "Monthly." }] },
+        { ...checkout, not_applicable: [{ field: "items", reason: "None." }] },
+        { ...checkout, payment_method: { card_number: "4242424242424242" } },
+        { ...checkout, credential: { token: "tok_1" } },
+        { ...checkout, actions: [] },
+    ]) {
+        assert.ok(
+            check("checkout-summary.schema.json", invalid).length > 0,
+            JSON.stringify(invalid),
+        );
+    }
+});
+
 test("a valid poppy.json passes", () => {
     assert.deepEqual(check("poppy.schema.json", poppy), []);
 });

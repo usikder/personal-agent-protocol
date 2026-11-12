@@ -66,8 +66,21 @@ const MEDIATED_SIGN_IN_EXAMPLES: Record<string, Target> = {
 const OPERATIONS_EXAMPLES: Record<string, Target> = {
     "support:1": excerpt("extensions", "poppy.schema.json#/properties/extensions"),
     "operation-object:1": "operation.schema.json",
-    // The envelope and style discriminator are Poppy's; checkout data is UCP's versioned schema.
-    "checkout-summary:1": "operation.schema.json",
+    // The Operation, with its one rich object checked as a checkout summary.
+    "checkout-summary:1": {
+        allOf: [
+            { $ref: "operation.schema.json" },
+            {
+                type: "object",
+                properties: {
+                    rich_summary: {
+                        type: "array",
+                        items: { $ref: "checkout-summary.schema.json" },
+                    },
+                },
+            },
+        ],
+    },
     "approval-required:1": {
         type: "object",
         required: ["error", "operation"],

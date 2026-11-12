@@ -516,10 +516,12 @@ If you offer mediated sign-in, protect the credentials you accept (Mediated Sign
 
 ### Operations: [Checkout](https://personalagentprotocol.org/docs/0.4/extensions/operations#checkout-summary)
 
-- [ ] **SHOULD**: A Company that supports UCP checkout SHOULD use its native checkout and approval flow.
-- [ ] **MUST**: The Company MUST provide the complete checkout response shape for that version, including `ucp`, `id`, `status`, `currency`, `line_items`, `totals`, and `links`.
-- [ ] **MUST**: The Company MUST set `checkout.ucp.version` to `2026-08-25` for this definition.
-- [ ] **MUST NOT**: The Company MUST NOT include payment credentials or `actions` in this summary object.
+- [ ] **SHOULD**: A Company that supports the UCP extension SHOULD use UCP for purchases instead of this object.
+- [ ] **MUST**: The Company MUST use one currency for every amount in the object.
+- [ ] **MUST**: The Company MUST list every continuing commitment the purchase creates in `obligations`, and state it in `summary`.
+- [ ] **MUST**: When an item has both `unit_amount` and `line_total`, the Company MUST make its `line_total` equal `unit_amount` times `quantity`.
+- [ ] **MUST**: When the object has `subtotal` and every item has `line_total`, the Company MUST make `subtotal` equal their sum.
+- [ ] **MUST NOT**: The Company MUST NOT include payment credentials in the object: `payment_method` describes how it collects payment, and carries nothing that can be used to pay.
 
 ### Operations: [6. Sending the approval](https://personalagentprotocol.org/docs/0.4/extensions/operations#sending-approval)
 

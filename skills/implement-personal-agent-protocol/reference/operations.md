@@ -105,13 +105,46 @@ Recommended styles help Companies and Personal Agents share rendering formats. T
 
 #### Checkout
 
-A Company that supports [UCP checkout](https://personalagentprotocol.org/docs/0.4/extensions/ucp#commerce) SHOULD use its native checkout and approval flow. For a checkout through another Company interface, the Company MAY include a `ucp.checkout` summary object with a `checkout` field using UCP's checkout data model. This lets a Personal Agent reuse its checkout presentation without requiring the Company to offer UCP endpoints.
+A Company that supports the [UCP extension](https://personalagentprotocol.org/docs/0.4/extensions/ucp) SHOULD use UCP for purchases instead of this object. A Company MAY use a `checkout` summary object as a stopgap for a purchase through another interface, until it supports UCP.
 
-The [checkout summary schema](https://personalagentprotocol.org/kit/company/schemas/checkout-summary.schema.json) references the published [UCP 2026-08-25 Checkout schema](https://ucp.dev/2026-08-25/schemas/shopping/checkout.json), not a separate Operations receipt format. The Company MUST provide the complete checkout response shape for that version, including `ucp`, `id`, `status`, `currency`, `line_items`, `totals`, and `links`. Buyer information is optional. When present, `fulfillment` uses the same version's [UCP Fulfillment definition](https://ucp.dev/2026-08-25/schemas/shopping/fulfillment.json#/$defs/fulfillment). The Company MUST set `checkout.ucp.version` to `2026-08-25` for this definition. A Personal Agent that does not support that checkout version uses `summary` (3.1).
+A `checkout` object describes a purchase the Operation performs: what the User pays when the Company performs it, what they buy, and any later charge or commitment. This page defines version `"1"`, and the [checkout summary schema](https://personalagentprotocol.org/kit/company/schemas/checkout-summary.schema.json) describes it.
 
-The Company MUST NOT include payment credentials or `actions` in this summary object. Display-safe payment instrument references can be included. The Personal Agent MUST NOT treat checkout metadata, status, payment handlers, or URLs in this object as authority to send UCP requests. In particular, `ready_for_complete` does not change what the Operation approves. The Company's `summary` still states the exact effect, such as buying an item or only opening checkout. Approval names this Operation's `operation_id` and `revision` and follows section 6, not UCP Complete Checkout.
+| Field | Req. | Description |
+| --- | --- | --- |
+| `style` | Yes | `checkout`. |
+| `version` | Yes | `"1"`. |
+| `amount_due_now` | Yes | The amount the Company charges when it performs the operation, including any tax and fees, as an amount (below). |
+| `conditional_charge` | No | An additional charge the Company may collect later, such as a no-show fee: `max`, the most it can be, as an amount, and `terms`, the conditions under which the Company collects it. It isn't charged now. |
+| `items` | No | What the User buys. Each item has `name` and `quantity`, and MAY have `options`, `unit_amount`, `line_total`, `seller`, and `obligations` (below). |
+| `subtotal` | No | The items' total before other charges, as an amount. |
+| `obligations` | No | Commitments that continue after this purchase, for the whole purchase (below). A commitment for one item is in that item's `obligations`. |
+| `fulfillment` | No | How the purchase reaches the User, as the Company will carry it out: `destination`, `service`, `arrival`, and `pickup_location`, each a display string. |
+| `account` | No | The account the purchase is made in, as the Company shows it. |
+| `contact` | No | The contact details the Company will use for the purchase, as it shows them. |
+| `payment_method` | No | How the Company will collect payment, as it shows it, such as `Visa ending in 4242`. |
+| `not_applicable` | No | Terms that don't apply to this purchase. Each entry has `field`, one of `fulfillment`, `account`, `contact`, or `payment_method`, and `reason`, the Company's explanation. |
 
-This purchase example uses a digital item, so it needs no physical fulfillment:
+An item's `options` are the variants the User chose, each written `Name: Value`, such as `Size: M`. Its `unit_amount` and `line_total` are amounts. Its `seller` names who sells the item when that isn't the Company, such as on a marketplace.
+
+An **amount** is an object with `amount`, a decimal string in the currency's major unit that uses `.` as the decimal point and no digit-grouping separators, such as `"12.00"` for 12 US dollars or `"1980"` for 1,980 yen, and `currency`, an uppercase [ISO 4217](https://www.iso.org/iso-4217-currency-codes.html) code. The Company MUST use one currency for every amount in the object.
+
+An **obligation** has a `kind`:
+
+- `recurring`: a repeating charge, with `amount`, `interval`, such as `month`, and `terms`, which include how to cancel.
+- `financing`: payment spread over time, with `total`, the amount the User pays in all, and `terms`.
+- `other`: any other continuing commitment, with `terms`.
+
+The Company MUST list every continuing commitment the purchase creates in `obligations`, and state it in `summary`. Later payments of a commitment aren't part of `amount_due_now`.
+
+When an item has both `unit_amount` and `line_total`, the Company MUST make its `line_total` equal `unit_amount` times `quantity`. When the object has `subtotal` and every item has `line_total`, the Company MUST make `subtotal` equal their sum.
+
+A field the Company leaves out is not stated; it doesn't mean zero or none. A term that doesn't apply, such as fulfillment for a digital item, is left out of its field and listed in `not_applicable`.
+
+The Company MUST NOT include payment credentials in the object: `payment_method` describes how it collects payment, and carries nothing that can be used to pay.
+
+A Personal Agent SHOULD check the rules above before rendering a `checkout` object, and treats an object that breaks them as invalid (3.1). When it renders one, it shows `amount_due_now`, and `conditional_charge` and every obligation when present.
+
+This purchase is a digital item with monthly map updates, so it needs no fulfillment:
 
 *Operation with a checkout summary: Company → Personal Agent*
 
@@ -119,44 +152,41 @@ This purchase example uses a digital item, so it needs no physical fulfillment:
 {
   "operation_id": "buy_guide_1",
   "revision": "rev_1",
-  "summary": "Buy one digital Trail Guide for $12.00 USD, including tax, charged to the saved card on your account. Deliver the download to buyer@example.net. No shipping charge or other fee.",
+  "summary": "Buy one digital Trail Guide for $12.00 USD, including tax, charged to the Visa ending in 4242 on your account. Map updates then cost $3.00 USD a month, starting December 8; cancel anytime in your account settings. The download goes to buyer@example.net.",
   "rich_summary": [
     {
-      "style": "ucp.checkout",
-      "checkout": {
-        "ucp": { "version": "2026-08-25", "status": "success", "payment_handlers": {} },
-        "id": "chk_guide_1",
-        "status": "ready_for_complete",
-        "currency": "USD",
-        "line_items": [
-          {
-            "id": "li_guide_1",
-            "item": { "id": "trail-guide", "title": "Trail Guide (digital download)", "price": 1200 },
-            "quantity": 1,
-            "totals": [
-              { "type": "subtotal", "amount": 1200 },
-              { "type": "total", "amount": 1200 }
-            ]
-          }
-        ],
-        "buyer": { "email": "buyer@example.net" },
-        "totals": [
-          { "type": "subtotal", "amount": 1200 },
-          { "type": "tax", "amount": 0 },
-          { "type": "total", "amount": 1200 }
-        ],
-        "links": [
-          { "type": "privacy_policy", "url": "https://alpine-retail.example/privacy" },
-          { "type": "terms_of_service", "url": "https://alpine-retail.example/terms" }
-        ]
-      }
+      "style": "checkout",
+      "version": "1",
+      "amount_due_now": { "amount": "12.00", "currency": "USD" },
+      "items": [
+        {
+          "name": "Trail Guide (digital download)",
+          "quantity": 1,
+          "options": ["Format: PDF"],
+          "unit_amount": { "amount": "12.00", "currency": "USD" },
+          "line_total": { "amount": "12.00", "currency": "USD" },
+          "obligations": [
+            {
+              "kind": "recurring",
+              "amount": { "amount": "3.00", "currency": "USD" },
+              "interval": "month",
+              "terms": "Map updates start December 8. Cancel anytime in your account settings."
+            }
+          ]
+        }
+      ],
+      "subtotal": { "amount": "12.00", "currency": "USD" },
+      "account": "buyer@example.net",
+      "contact": "buyer@example.net",
+      "payment_method": "Visa ending in 4242",
+      "not_applicable": [
+        { "field": "fulfillment", "reason": "Digital download; nothing ships." }
+      ]
     }
   ],
   "expires_at": "2026-10-08T12:20:00-07:00"
 }
 ```
-
-Amounts and the other checkout fields keep UCP's meaning, including its currency minor units. In this example, the payment method is described only in `summary`, so the Personal Agent shows that text alongside the rich checkout to keep the full approval terms visible.
 
 ## 4. Asking for approval
 
